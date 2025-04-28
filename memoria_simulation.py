@@ -140,6 +140,7 @@ class MemoriaResultVisualizer:
         mean_val = np.mean(actual)
         std_val = np.std(actual)
         
+        print(f"1日あたりの期待値: {theoretical / n_days:.2f}")
         print(f"理論値（{n_days}日累計）: {theoretical:.2f}")
         print(f"シミュレーション平均    : {mean_val:.2f}")
         print(f"シミュレーション標準偏差: {std_val:.2f}")
@@ -158,7 +159,11 @@ class MemoriaResultVisualizer:
             actual (List[int]): 実際のシミュレーション結果
         """
         plt.figure(figsize=(8, 5))
-        plt.hist(actual, bins=30, edgecolor='black', alpha=0.7)
+        # 整数値データ用のビニング設定
+        min_val, max_val = min(actual), max(actual)
+        # 各整数値が中心になるように+1して0.5ずらしたビン境界を設定
+        bins = np.arange(min_val, max_val + 2) - 0.5
+        plt.hist(actual, bins=bins, edgecolor='black', alpha=0.7)
         plt.axvline(
             theoretical,
             color='red',
@@ -216,7 +221,7 @@ def run_simulation_with_params(gate_level: int = 10, unit_size: int = 6, n_days:
 # ------------------------------------------------------------
 if __name__ == "__main__":
     # ── パラメータ ──
-    GATE_LEVEL = 10     # ゲートレベル (1–40)
+    GATE_LEVEL = 32     # ゲートレベル (1–40)
     UNIT_SIZE  = 6      # ユニット人数
     N_DAYS     = 30     # シミュレーション日数
     INVITED    = True   # 招待状を常時使うか
