@@ -1,238 +1,227 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+memoria_calc.py
+招待状の有無によるメモリア期待値とシミュレーション
 
-"""メモリアシミュレーター - プロジェクトセカイのメモリアドロップ確率をシミュレーション"""
+使い方（スクリプト先頭のパラメータを書き換えて実行）:
+    python memoria_calc.py
+"""
 
+from __future__ import annotations
 import random
-from typing import Dict, List, Set, Tuple, Optional, Union
-import matplotlib.pyplot as plt
+import itertools
+from typing import Dict, Tuple, List
+
 import numpy as np
+import matplotlib.pyplot as plt
+
+# ──────────────────────────────────────────────────────────
+# 0. ゲートレベル → {来場人数: 確率} のテーブル
+# ──────────────────────────────────────────────────────────
+def build_prob_table() -> Dict[int, Dict[int, float]]:
+    tbl: Dict[int, Dict[int, float]] = {}
+    for lv in range(1, 41):
+        if lv <= 30:
+            p2, p3, p4, p5 = 60 - 2 * lv, 30, 10 + lv, lv
+        else:
+            d = lv - 30
+            p2, p3, p4, p5 = 0, 30 - d, 40, 30 + d
+        tbl[lv] = {2: p2 / 100, 3: p3 / 100, 4: p4 / 100, 5: p5 / 100}
+    return tbl
 
 
-class MemoriaSimulator:
-    """メモリアシミュレーションのためのクラス
-    
-    プロセカのメモリア獲得確率をシミュレートするためのクラスで、
-    ゲートレベルに応じた確率表の生成、1日のシミュレーション、複数日のシミュレーション、
-    期待値の計算などの機能を提供します。
+PROB_TABLE = build_prob_table()
+
+# ──────────────────────────────────────────────────────────
+# 1. 解析的期待値
+# ──────────────────────────────────────────────────────────
+def daily_expectation(
+    level: int,
+    unit_size: int,
+    invited: bool = False,
+) -> Tuple[float, Dict[str, float]]:
     """
-    
-    def __init__(self):
-        """確率表を初期化してシミュレーターを準備"""
-        self.prob_table = self._build_prob_table()
+    level      : ゲートレベル (1–40)
+    unit_size  : ユニットのキャラクター人数
+    invited    : 招待状を常時使用するか
 
-    def _build_prob_table(self) -> Dict[int, Dict[int, float]]:
-        """ゲートレベルに応じた確率表を生成
-        
-        Returns:
-            Dict[int, Dict[int, float]]: {ゲートレベル: {来場人数: 確率}}
-        """
-        tbl = {}
-        for lv in range(1, 41):
-            if lv <= 30:
-                p2, p3, p4, p5 = 60 - 2*lv, 30, 10 + lv, lv
-            else:
-                delta = lv - 30
-                p2, p3, p4, p5 = 0, 30 - delta, 40, 30 + delta
-            tbl[lv] = {2: p2/100, 3: p3/100, 4: p4/100, 5: p5/100}
-        return tbl
-
-    def draw_visitors(self, level: int) -> int:
-        """1セッション（5時 or 17時）の来場人数をサンプリング
-        
-        Args:
-            level (int): ゲートレベル (1-40)
-            
-        Returns:
-            int: 来場人数 (2-5)
-        """
-        r = random.random()
-        acc = 0.0
-        for k, p in self.prob_table[level].items():
-            acc += p
-            if r < acc:
-                return k
-        return 5  # 万一のフォールバック
-
-    def simulate_one_day(self, level: int, unit_size: int, invited: bool) -> int:
-        """1日のメモリア獲得数を計算
-        
-        Args:
-            level (int): ゲートレベル (1-40)
-            unit_size (int): ユニット人数
-            invited (bool): 招待状を使用するか
-            
-        Returns:
-            int: 1日のメモリア獲得数
-        """
-        chars = list(range(unit_size))
-        invited_char = 0 if invited else None
-
-        # 午前・午後 2 回の抽選
-        sessions = [set(random.sample(chars, self.draw_visitors(level))) for _ in range(2)]
-        unique_today = set.union(*sessions)
-        gain = len(unique_today)
-
-        # 招待中キャラが来ていれば +1
-        if invited_char is not None and invited_char in unique_today:
-            gain += 1
-        return gain
-
-    def run_simulations(self, n_runs: int, n_days: int, level: int, unit_size: int, invited: bool) -> List[int]:
-        """N日×複数試行の累計メモリアをシミュレーション
-        
-        Args:
-            n_runs (int): シミュレーション試行回数
-            n_days (int): シミュレーション日数
-            level (int): ゲートレベル (1-40)
-            unit_size (int): ユニット人数
-            invited (bool): 招待状を使用するか
-            
-        Returns:
-            List[int]: 各試行の累計メモリア獲得数のリスト
-        """
-        totals = []
-        for _ in range(n_runs):
-            total = sum(self.simulate_one_day(level, unit_size, invited) for _ in range(n_days))
-            totals.append(total)
-        return totals
-
-    def expected_daily_memoria(self, level: int, unit_size: int, invited: bool = False) -> float:
-        """1日あたり期待値の解析計算
-        
-        Args:
-            level (int): ゲートレベル (1-40)
-            unit_size (int): ユニット人数
-            invited (bool, optional): 招待状を使用するか. Defaults to False.
-            
-        Returns:
-            float: 1日あたりの期待メモリア獲得数
-        """
-        probs = self.prob_table[level]
-        M = unit_size
-        e_unique = 0.0
-        p_inv = 0.0
-        for k1, p1 in probs.items():
-            for k2, p2 in probs.items():
-                p = p1 * p2
-                q_not = (M - k1) / M * (M - k2) / M
-                p_appear = 1 - q_not
-                e_unique += M * p_appear * p
-                p_inv += p_appear * p
-        return e_unique + (p_inv if invited else 0.0)
-
-
-class MemoriaResultVisualizer:
-    """メモリアシミュレーション結果の表示クラス
-    
-    シミュレーション結果の表示と可視化を行うためのクラスです。
+    戻り値
+    -------
+    total_exp  : 1 日あたり総獲得メモリア期待値
+    per_char   : {キャラ種別: 期待値} の辞書
+                 invited が False の場合 -> {'all': μ}
+                 invited が True  の場合 -> {'invited': 2, 'others': μ}
     """
-    
-    @staticmethod
-    def print_results(n_days: int, theoretical: float, actual: List[int]) -> None:
-        """シミュレーション結果を標準出力に表示
-        
-        Args:
-            n_days (int): シミュレーション日数
-            theoretical (float): 理論値
-            actual (List[int]): 実際のシミュレーション結果
-        """
-        mean_val = np.mean(actual)
-        std_val = np.std(actual)
-        
-        print(f"1日あたりの期待値: {theoretical / n_days:.2f}")
-        print(f"理論値（{n_days}日累計）: {theoretical:.2f}")
-        print(f"シミュレーション平均    : {mean_val:.2f}")
-        print(f"シミュレーション標準偏差: {std_val:.2f}")
-    
-    @staticmethod
-    def plot_results(n_days: int, level: int, invited: bool, n_runs: int, 
-                    theoretical: float, actual: List[int]) -> None:
-        """シミュレーション結果をヒストグラムでプロット
-        
-        Args:
-            n_days (int): シミュレーション日数
-            level (int): ゲートレベル
-            invited (bool): 招待状を使用したか
-            n_runs (int): シミュレーション実行回数
-            theoretical (float): 理論値
-            actual (List[int]): 実際のシミュレーション結果
-        """
-        plt.figure(figsize=(8, 5))
-        # 整数値データ用のビニング設定
-        min_val, max_val = min(actual), max(actual)
-        # 各整数値が中心になるように+1して0.5ずらしたビン境界を設定
-        bins = np.arange(min_val, max_val + 2) - 0.5
-        plt.hist(actual, bins=bins, edgecolor='black', alpha=0.7)
-        plt.axvline(
-            theoretical,
-            color='red',
-            linestyle='--',
-            linewidth=2,
-            label=f'Theoretical total: {theoretical:.1f}'
+    probs = PROB_TABLE[level]
+
+    if not invited:
+        # 任意キャラが 1 日に少なくとも 1 回来る確率
+        per_char = sum(
+            p1 * p2 * (1 - ((unit_size - k1) / unit_size) * ((unit_size - k2) / unit_size))
+            for k1, p1 in probs.items()
+            for k2, p2 in probs.items()
         )
-        plt.title(f'Distribution of cumulative memoria after {n_days} days\n'
-                f'Level {level}, Invited={invited}, Runs={n_runs}')
-        plt.xlabel('Cumulative Memoria')
-        plt.ylabel('Frequency')
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
+        total = unit_size * per_char
+        return total, {"all": per_char}
 
+    # ── 招待状あり ──────────────────────────────
+    invited_gain = 2.0  # 1 日 2 個確定
 
-def run_simulation_with_params(gate_level: int = 10, unit_size: int = 6, n_days: int = 30, 
-                             invited: bool = True, n_runs: int = 10000, 
-                             show_plot: bool = True) -> Tuple[float, List[int]]:
-    """指定パラメータでシミュレーションを実行
-    
-    Args:
-        gate_level (int, optional): ゲートレベル. Defaults to 10.
-        unit_size (int, optional): ユニット人数. Defaults to 6.
-        n_days (int, optional): シミュレーション日数. Defaults to 30.
-        invited (bool, optional): 招待状を使用するか. Defaults to True.
-        n_runs (int, optional): シミュレーション試行回数. Defaults to 10000.
-        show_plot (bool, optional): 結果をプロットするか. Defaults to True.
-        
-    Returns:
-        Tuple[float, List[int]]: (理論値, シミュレーション結果リスト)
-    """
-    simulator = MemoriaSimulator()
-    visualizer = MemoriaResultVisualizer()
-    
-    # 理論値計算
-    daily_exp = simulator.expected_daily_memoria(gate_level, unit_size, invited)
-    theoretical_total = daily_exp * n_days
-    
-    # シミュレーション実行
-    totals = simulator.run_simulations(n_runs, n_days, gate_level, unit_size, invited)
-    
-    # 結果表示
-    visualizer.print_results(n_days, theoretical_total, totals)
-    
-    # グラフ表示（オプション）
-    if show_plot:
-        visualizer.plot_results(n_days, gate_level, invited, n_runs, theoretical_total, totals)
-    
-    return theoretical_total, totals
-
-
-# ------------------------------------------------------------
-# メイン実行部
-# ------------------------------------------------------------
-if __name__ == "__main__":
-    # ── パラメータ ──
-    GATE_LEVEL = 32     # ゲートレベル (1–40)
-    UNIT_SIZE  = 6      # ユニット人数
-    N_DAYS     = 30     # シミュレーション日数
-    INVITED    = True   # 招待状を常時使うか
-    N_RUNS     = 1000  # モンテカルロ試行回数
-    
-    # シミュレーション実行
-    run_simulation_with_params(
-        gate_level=GATE_LEVEL,
-        unit_size=UNIT_SIZE,
-        n_days=N_DAYS,
-        invited=INVITED,
-        n_runs=N_RUNS,
-        show_plot=True
+    per_other = sum(
+        p1
+        * p2
+        * (
+            1
+            - ((unit_size - k1) / (unit_size - 1))
+            * ((unit_size - k2) / (unit_size - 1))
+        )
+        for k1, p1 in probs.items()
+        for k2, p2 in probs.items()
     )
+    total = invited_gain + (unit_size - 1) * per_other
+    return total, {"invited": invited_gain, "others": per_other}
+
+
+def expectation_after_days(
+    days: int,
+    level: int,
+    unit_size: int,
+    invited: bool = False,
+) -> Tuple[float, Dict[str, float]]:
+    """
+    指定日数後の累計期待値を返す（招待キャラを固定している前提。
+    72 時間ルール等は無視）
+    """
+    daily_total, per_char = daily_expectation(level, unit_size, invited)
+    total_after = daily_total * days
+    per_char_after = {k: v * days for k, v in per_char.items()}
+    return total_after, per_char_after
+
+
+# ──────────────────────────────────────────────────────────
+# 2. シミュレーション（オプション）
+# ──────────────────────────────────────────────────────────
+def _draw_k(level: int) -> int:
+    r = random.random()
+    acc = 0.0
+    for k, p in PROB_TABLE[level].items():
+        acc += p
+        if r < acc:
+            return k
+    return 5  # fallback
+
+
+def simulate_one_day(level: int, unit_size: int, invited: bool) -> Tuple[int, List[int]]:
+    """
+    1 日シミュレーション
+    戻り値:
+        total_gain … その日の総メモリア
+        gains_by_id … 各キャラごとのメモリア (長さ unit_size)
+    """
+    characters = list(range(unit_size))
+    invited_id = 0 if invited else None
+
+    gains = [0] * unit_size
+
+    # 午前・午後の 2 セッション
+    for _ in range(2):
+        k_total = _draw_k(level)
+
+        if invited_id is not None:
+            gains[invited_id] = 2  # 日ごとに上書きしても OK（1 日 2 個確定）
+            remaining_slots = k_total - 1
+            pool = [c for c in characters if c != invited_id]
+        else:
+            remaining_slots = k_total
+            pool = characters
+
+        if remaining_slots > 0:
+            visitors = random.sample(pool, remaining_slots)
+            for vid in visitors:
+                gains[vid] = 1  # 複数回来ても 1 日 1 個
+
+    total_gain = sum(gains)
+    return total_gain, gains
+
+
+def run_simulations(
+    runs: int,
+    days: int,
+    level: int,
+    unit_size: int,
+    invited: bool = False,
+) -> List[int]:
+    """
+    returns: 各 run の累計メモリア
+    """
+    totals = []
+    for _ in range(runs):
+        total = 0
+        for _ in range(days):
+            g, _ = simulate_one_day(level, unit_size, invited)
+            total += g
+        totals.append(total)
+    return totals
+
+
+def plot_distribution(
+    totals: List[int],
+    theoretical_total: float,
+    title: str,
+    bins: int = 30,
+) -> None:
+    plt.figure(figsize=(8, 5))
+    plt.hist(totals, bins=bins, edgecolor="black", alpha=0.7)
+    plt.axvline(
+        theoretical_total,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Theoretical: {theoretical_total:.1f}"
+    )
+    plt.title(title, fontsize=14)
+    plt.xlabel("Total Memoria", fontsize=12)
+    plt.ylabel("Frequency", fontsize=12)
+    plt.legend(fontsize=12)
+    plt.tight_layout()
+    plt.show()
+
+
+# ──────────────────────────────────────────────────────────
+# 3. 動作サンプル  (ここを書き換えて実行)
+# ──────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    # ===== パラメータ設定 =====
+    GATE_LEVEL = 32       # ゲートレベル
+    UNIT_SIZE  = 6        # ユニット人数
+    INVITED    = True     # 招待状を使うか
+    DAYS       = 30       # 期待値／シミュレーション日数
+    RUNS       = 0        # モンテカルロ試行回数
+    # =========================
+
+    # 期待値計算
+    daily_total, daily_per = daily_expectation(GATE_LEVEL, UNIT_SIZE, INVITED)
+    cum_total, cum_per = expectation_after_days(
+        DAYS, GATE_LEVEL, UNIT_SIZE, INVITED
+    )
+
+    print("● 解析的期待値")
+    print(f"  1日あたり総メモリア期待値 : {daily_total:.3f}")
+    print(f"  1日あたりキャラ別期待値   : {daily_per}")
+    print(f"  {DAYS}日後累計期待値       : {cum_total:.3f}")
+    print(f"  {DAYS}日後キャラ別累計期待値: {cum_per}")
+
+    # シミュレーション（必要ない場合はRUNS=0にしてください）
+    if RUNS > 0:
+        totals = run_simulations(RUNS, DAYS, GATE_LEVEL, UNIT_SIZE, INVITED)
+        mean_val, std_val = np.mean(totals), np.std(totals)
+        print("\n● シミュレーション結果")
+        print(f"  平均={mean_val:.3f},  標準偏差={std_val:.3f}")
+
+        plot_distribution(
+            totals,
+            theoretical_total=cum_total,
+            title=f"{DAYS}-Day Total Memoria Distribution\n"
+                  f"Gate Level {GATE_LEVEL}, Invited={INVITED}, Runs={RUNS}"
+        )
