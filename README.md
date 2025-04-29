@@ -25,9 +25,9 @@ pip install numpy matplotlib
    ```python
    GATE_LEVEL = 10    # ゲートレベル (1–40)
    UNIT_SIZE = 6      # ユニット人数
-   N_DAYS = 30        # シミュレーション日数
+   DAYS = 30          # 期待値／シミュレーション日数
    INVITED = True     # 招待状を使用するか
-   N_RUNS = 10000     # モンテカルロ試行回数
+   RUNS = 10000       # モンテカルロ試行回数（0でシミュレーションなし）
    ```
 2. 以下を実行:
    ```bash
@@ -35,13 +35,18 @@ pip install numpy matplotlib
    ```
 3. 別スクリプトから呼び出し:
    ```python
-   from memoria_simulation import run_simulation_with_params
-   run_simulation_with_params(
-       gate_level=10,
-       unit_size=6,
-       n_days=30,
-       invited=True,
-       n_runs=10000,
-       show_plot=True
+   from memoria_simulation import daily_expectation, expectation_after_days, run_simulations
+
+   # 解析的期待値
+   daily_total, daily_per = daily_expectation(
+       level=10, unit_size=6, invited=True
+   )
+   cum_total, cum_per = expectation_after_days(
+       days=30, level=10, unit_size=6, invited=True
+   )
+
+   # シミュレーション
+   totals = run_simulations(
+       runs=10000, days=30, level=10, unit_size=6, invited=True
    )
    ```
