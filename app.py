@@ -17,9 +17,6 @@ from memoria_simulation import (
 )
 
 
-
-
-
 def show_probability_table(level):
     """指定されたゲートレベルの確率テーブルを表示"""
     st.subheader(f"ゲートレベル {level} の確率分布")
