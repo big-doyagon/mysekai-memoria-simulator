@@ -172,7 +172,13 @@ def plot_distribution(
     bins: int = 30,
 ) -> None:
     plt.figure(figsize=(8, 5))
-    plt.hist(totals, bins=bins, edgecolor="black", alpha=0.7)
+    
+    # 整数値データに適したビン設定
+    min_val, max_val = min(totals), max(totals)
+    # 整数の範囲を使用してビンを設定
+    bins_range = np.arange(min_val, max_val + 2) - 0.5  # 各整数値の中心にビンを配置
+    
+    plt.hist(totals, bins=bins_range, edgecolor="black", alpha=0.7)
     plt.axvline(
         theoretical_total,
         color="red",
@@ -197,7 +203,7 @@ if __name__ == "__main__":
     UNIT_SIZE  = 6        # ユニット人数
     INVITED    = True     # 招待状を使うか
     DAYS       = 30       # 期待値／シミュレーション日数
-    RUNS       = 0        # モンテカルロ試行回数
+    RUNS       = 1000        # モンテカルロ試行回数
     # =========================
 
     # 期待値計算
